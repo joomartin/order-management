@@ -1,0 +1,5 @@
+[
+    { "id": 1, "name": "XY Kft.", "database": "xy.json" },
+    { "id": 2, "name": "ABC Kft.", "database": "abc.json" },
+    { "id": 3, "name": "CBA és Társa Bt.", "database": "cba.json" }
+]
