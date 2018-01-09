@@ -5,25 +5,28 @@ const DB = (() => {
     const COMPANIES = require('./database/companies.json');
     const PRODUCTS = require('./database/products.json');
 
+    const createFindByColumn = table => column => value => table.find(item => item[column] == value);
+    const createFindMoreById = table => ids => table.filter(item => ids.some(id => id == item.id));
+
     return {
         companies: {
             findAll() {
                 return COMPANIES;
             },
-            findById(id) {
-                return COMPANIES.find(c => c.id == id);
-            },
             findOrders(company) {
                 return require(`./database/${company.database}`);
-            }
+            },
+            findById: createFindByColumn(COMPANIES)('id'),
+            findMoreById: createFindMoreById(COMPANIES),       
+            findByColumn: createFindByColumn(COMPANIES)     
         },
         products: {
             findAll() {
                 return PRODUCTS;
             },
-            findMoreById(ids) {
-                return PRODUCTS.filter(p => ids.some(id => id === p.id));
-            }
+            findById: createFindByColumn(PRODUCTS)('id'), 
+            findMoreById: createFindMoreById(PRODUCTS),
+            findByColumn: createFindByColumn(PRODUCTS)
         },
         orders: {
             saveOrder({ company, order }) {
@@ -33,7 +36,8 @@ const DB = (() => {
                     order
                 ];
             
-                return fs.writeFile(`./database/${company.database}`, JSON.stringify(newOrders));
+                return fs.writeFile(`./database/${company.database}`, JSON.stringify(newOrders))
+                    .then(res => order);
             }
         }
     };
@@ -85,66 +89,77 @@ const IO = {
     }
 }
 
-function parseProductSelection(selection) {
-    return selection
-        .split(',')
-        .filter(s => s.length !== 0)
-        .map(s => parseInt(s));
-}   
-
-function createOrderData() {
-    const companyId = IO.inputCompany();
-    const productIds = parseProductSelection(IO.inputProducts());
-    const customer = IO.inputCustomer();
-    const price = DB.products.findMoreById(productIds).reduce((sum, p) => sum + parseInt(p.price), 0);
-
-    return {
-        company: DB.companies.findById(companyId),
-        order: {
-            productIds,
-            customer,
-            date: new Date,
-            price
-        }
-    };
+const PRODUCT = {
+    parseProductSelection(selection) {
+        return selection
+            .split(',')
+            .filter(s => s.length !== 0)
+            .map(s => parseInt(s));
+    }   
 }
 
-function getRevenue(companyId) {
-    if (companyId === 0) {
-        return getAllCompanyRevenue();
-    } else {
-        return getCompanyRevenue(companyId);
+const ORDER = {
+    createOrderData(companyId, productIds, customer) {
+        const price = DB.products.findMoreById(productIds).reduce((sum, p) => sum + parseInt(p.price), 0);
+    
+        return {
+            company: DB.companies.findById(companyId),
+            order: {
+                productIds,
+                customer,
+                date: new Date,
+                price
+            }
+        };
     }
 }
 
-function getAllCompanyRevenue() {
-    const companies = DB.companies.findAll();
-    return companies
-        .map(c => DB.companies.findOrders(c))
-        .reduce((acc, curr) => acc.concat(curr), [])
-        .reduce((sum, o) => sum + parseInt(o.price), 0);
-}
-
-function getCompanyRevenue(companyId) {
-    const company = DB.companies.findById(companyId);
-    const orders = DB.companies.findOrders(company);
-
-    return orders.reduce((sum, o) => sum + parseInt(o.price), 0);
+const REPORT = {
+    getRevenue(companyId) {
+        if (companyId === 0) {
+            return REPORT.getAllCompanyRevenue();
+        } else {
+            return REPORT.getCompanyRevenue(companyId);
+        }
+    },
+    
+    getAllCompanyRevenue() {
+        const companies = DB.companies.findAll();
+        return companies
+            .map(c => DB.companies.findOrders(c))
+            .reduce((acc, curr) => acc.concat(curr), [])
+            .reduce((sum, o) => sum + parseInt(o.price), 0);
+    },
+    
+    getCompanyRevenue(companyId) {
+        const company = DB.companies.findById(companyId);
+        const orders = DB.companies.findOrders(company);
+    
+        return orders.reduce((sum, o) => sum + parseInt(o.price), 0);
+    }
 }
 
 const action = IO.mainMenu();
+let companyId;
 switch (action) {
     case 1:
-        const order = createOrderData();
+        companyId = IO.inputCompany();
+        const productIds = PRODUCT.parseProductSelection(IO.inputProducts());
+        const customer = IO.inputCustomer();
+
+        const order = ORDER.createOrderData(companyId, productIds, customer);
+
         DB.orders.saveOrder(order)
-            .then(res => console.log('Mentés sikeres'))
+            .then(order => console.log('Mentés sikeres! Végösszeg: ' + order.price))
             .catch(err => console.log('Hiba történt: ', err));
 
         break;
     case 2:
         IO.reportMenu();
-        const companyId = IO.inputCompany(true);
-        const revenue = getRevenue(companyId);
+        companyId = IO.inputCompany(true);
+        const revenue = REPORT.getRevenue(companyId);
 
         console.log('Forgalom: ' + revenue + ' Ft');
+
+        break;
 }
