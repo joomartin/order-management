@@ -12,6 +12,9 @@ const DB = (() => {
             },
             findById(id) {
                 return COMPANIES.find(c => c.id == id);
+            },
+            findOrders(company) {
+                return require(`./database/${company.database}`);
             }
         },
         products: {
@@ -20,6 +23,17 @@ const DB = (() => {
             },
             findMoreById(ids) {
                 return PRODUCTS.filter(p => ids.some(id => id === p.id));
+            }
+        },
+        orders: {
+            saveOrder({ company, order }) {
+                const orders = DB.companies.findOrders(company);
+                const newOrders = [
+                    ...orders,
+                    order
+                ];
+            
+                return fs.writeFile(`./database/${company.database}`, JSON.stringify(newOrders));
             }
         }
     };
@@ -86,24 +100,13 @@ function createOrderData() {
 
     return {
         company: DB.companies.findById(companyId),
-        data: {
+        order: {
             productIds,
             customer,
             date: new Date,
             price
         }
     };
-}
-
-function saveOrder(orderData) {
-    const filename = `./database/${orderData.company.database}`;
-    const orders = require(filename);
-    const newOrders = [
-        ...orders,
-        orderData.data
-    ];
-
-    return fs.writeFile(filename, JSON.stringify(newOrders));
 }
 
 function getRevenue(companyId) {
@@ -117,14 +120,14 @@ function getRevenue(companyId) {
 function getAllCompanyRevenue() {
     const companies = DB.companies.findAll();
     return companies
-        .map(c => require(`./database/${c.database}`))
+        .map(c => DB.companies.findOrders(c))
         .reduce((acc, curr) => acc.concat(curr), [])
         .reduce((sum, o) => sum + parseInt(o.price), 0);
 }
 
 function getCompanyRevenue(companyId) {
     const company = DB.companies.findById(companyId);
-    const orders = require(`./database/${company.database}`);
+    const orders = DB.companies.findOrders(company);
 
     return orders.reduce((sum, o) => sum + parseInt(o.price), 0);
 }
@@ -133,7 +136,7 @@ const action = IO.mainMenu();
 switch (action) {
     case 1:
         const order = createOrderData();
-        saveOrder(order)
+        DB.orders.saveOrder(order)
             .then(res => console.log('Mentés sikeres'))
             .catch(err => console.log('Hiba történt: ', err));
 
